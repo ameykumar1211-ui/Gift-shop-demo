@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <meta name="theme-color" content="#07111f" />
+  <title>EyeAccess — Hands‑Free Gaze Control</title>
+
+  <!-- WebGazer 3.5.3 (runs gaze estimation locally in the browser). -->
+  <script defer src="https://cdn.jsdelivr.net/npm/webgazer@3.5.3/dist/webgazer.js"></script>
+
+  <style>
+    :root{
+      --bg:#07111f;
+      --panel:#0f1c2d;
+      --panel2:#13243a;
+      --text:#eef7ff;
+      --muted:#9eb4c9;
+      --accent:#67e8f9;
+      --accent2:#a78bfa;
+      --ok:#5ee6a8;
+      --warn:#ffd166;
+      --danger:#ff6b7a;
+      --border:rgba(255,255,255,.10);
+      --shadow:0 18px 60px rgba(0,0,0,.42);
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;background:radial-gradient(circle at 10% 5%,#143259 0,#07111f 42%,#050b13 100%);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    body{min-height:100dvh;overflow-x:hidden}
+    button,input,textarea{font:inherit}
+    button{color:inherit}
+    .hidden{display:none!important}
+
+    .shell{min-height:100dvh;padding:calc(16px + env(safe-area-inset-top)) 16px calc(22px + env(safe-area-inset-bottom));max-width:920px;margin:0 auto}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.2px}
+    .logo{width:38px;height:38px;border-radius:13px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#03101a;box-shadow:0 8px 28px rgba(103,232,249,.22)}
+    .status-pill{display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border);border-radius:999px;background:rgba(15,28,45,.72);backdrop-filter:blur(14px);font-size:13px;color:var(--muted)}
+    .status-dot{width:9px;height:9px;border-radius:50%;background:#64748b;box-shadow:0 0 0 4px rgba(100,116,139,.12)}
+    .status-dot.live{background:var(--ok);box-shadow:0 0 0 4px rgba(94,230,168,.14),0 0 18px rgba(94,230,168,.55)}
+
+    .card{background:linear-gradient(180deg,rgba(19,36,58,.94),rgba(12,25,42,.94));border:1px solid var(--border);border-radius:26px;padding:22px;box-shadow:var(--shadow);backdrop-filter:blur(20px)}
+    h1{font-size:clamp(32px,8vw,58px);line-height:.98;margin:8px 0 14px;letter-spacing:-1.8px}
+    h2{font-size:24px;margin:0 0 10px}
+    p{color:var(--muted);line-height:1.55}
+    .hero-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:rgba(103,232,249,.1);border:1px solid rgba(103,232,249,.2);color:#c7f9ff;font-size:13px;font-weight:700}
+    .features{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:20px 0}
+    .feature{padding:14px;border-radius:18px;background:rgba(255,255,255,.045);border:1px solid var(--border)}
+    .feature b{display:block;margin-bottom:4px}
+    .feature span{font-size:13px;color:var(--muted)}
+    .primary,.secondary,.danger{border:0;border-radius:17px;padding:15px 18px;font-weight:800;cursor:pointer;min-height:54px}
+    .primary{background:linear-gradient(135deg,var(--accent),#8be9fd);color:#04111c;box-shadow:0 10px 30px rgba(103,232,249,.22)}
+    .secondary{background:rgba(255,255,255,.07);border:1px solid var(--border)}
+    .danger{background:rgba(255,107,122,.13);border:1px solid rgba(255,107,122,.28);color:#ffd8dd}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .row>*{flex:1 1 180px}
+    .small{font-size:12px;color:var(--muted)}
+    .notice{padding:13px 14px;border-radius:16px;border:1px solid rgba(255,209,102,.2);background:rgba(255,209,102,.07);color:#ffe9ac;font-size:13px;margin-top:14px}
+
+    #calibrationScreen{position:fixed;inset:0;z-index:100;background:#030811;display:grid;place-items:center}
+    .calibration-info{position:fixed;left:16px;right:16px;top:calc(14px + env(safe-area-inset-top));text-align:center;z-index:103;pointer-events:none}
+    .calibration-info h2{margin:0 0 4px;font-size:21px}
+    .calibration-info p{margin:0;font-size:13px}
+    #calibrationTarget{position:absolute;width:62px;height:62px;border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(circle,#fff 0 8%,var(--accent) 10% 34%,rgba(103,232,249,.14) 36% 62%,transparent 64%);filter:drop-shadow(0 0 16px rgba(103,232,249,.9));transition:left .28s ease,top .28s ease}
+    #calibrationTarget::after{content:"";position:absolute;inset:-16px;border-radius:50%;border:2px solid rgba(103,232,249,.28);animation:pulse 1s infinite ease-out}
+    @keyframes pulse{0%{transform:scale(.75);opacity:.9}100%{transform:scale(1.25);opacity:0}}
+    .progress-wrap{position:fixed;left:24px;right:24px;bottom:calc(28px + env(safe-area-inset-bottom));height:8px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden}
+    #calibrationProgress{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .2s linear}
+
+    #controlScreen{display:none}
+    .control-grid{display:grid;gap:14px}
+    .control-card{padding:16px;border-radius:22px;background:rgba(15,28,45,.82);border:1px solid var(--border)}
+    .control-card h3{margin:0 0 6px;font-size:16px}
+    .control-card p{margin:0;font-size:13px}
+    .big-area{min-height:360px;display:flex;flex-direction:column;gap:12px}
+    .demo-text{font-size:clamp(20px,5.2vw,32px);line-height:1.25;font-weight:800;letter-spacing:-.5px}
+    textarea{width:100%;min-height:122px;resize:none;border-radius:18px;border:1px solid var(--border);background:#07111f;color:var(--text);padding:16px;outline:none;font-size:19px;line-height:1.4}
+    textarea:focus{border-color:rgba(103,232,249,.55);box-shadow:0 0 0 4px rgba(103,232,249,.08)}
+    .toolbar{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+    .gaze-btn{min-height:66px;border:1px solid var(--border);background:rgba(255,255,255,.055);border-radius:17px;padding:10px;font-weight:800;position:relative;overflow:hidden}
+    .gaze-btn .label{position:relative;z-index:2}
+    .gaze-btn .dwell{position:absolute;inset:auto 0 0 0;height:0;background:linear-gradient(90deg,rgba(103,232,249,.46),rgba(167,139,250,.48));z-index:1;transition:height .05s linear}
+    .gaze-btn.gaze-hover{border-color:rgba(103,232,249,.6);transform:translateY(-1px)}
+    .gaze-btn.activated{animation:activate .34s ease}
+    @keyframes activate{50%{transform:scale(.96);background:rgba(94,230,168,.2)}}
+
+    .keyboard{display:grid;grid-template-columns:repeat(10,1fr);gap:6px;padding:8px 0 0}
+    .key{min-height:54px;border-radius:13px;border:1px solid var(--border);background:rgba(255,255,255,.05);font-weight:800;font-size:16px;position:relative;overflow:hidden;padding:4px}
+    .key.wide{grid-column:span 2}
+    .key.space{grid-column:span 4}
+    .key .dwell{position:absolute;inset:auto 0 0 0;height:0;background:rgba(103,232,249,.32);pointer-events:none}
+    .key span{position:relative;z-index:2}
+
+    #gazeCursor{position:fixed;left:50%;top:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;z-index:9999;pointer-events:none;border:3px solid #fff;background:rgba(103,232,249,.18);box-shadow:0 0 0 7px rgba(103,232,249,.12),0 0 28px rgba(103,232,249,.55);transform:translate3d(-100px,-100px,0);opacity:0;transition:opacity .2s}
+    #gazeCursor.live{opacity:1}
+    #gazeCursor::after{content:"";position:absolute;inset:9px;border-radius:50%;background:var(--accent)}
+    #dwellRing{position:fixed;width:50px;height:50px;margin:-25px 0 0 -25px;z-index:9998;pointer-events:none;border-radius:50%;background:conic-gradient(var(--ok) var(--pct,0%),rgba(255,255,255,.09) 0);transform:translate3d(-100px,-100px,0);opacity:0}
+    #dwellRing::after{content:"";position:absolute;inset:5px;background:rgba(7,17,31,.65);border-radius:50%}
+
+    .scroll-zone{position:fixed;left:0;right:0;height:70px;z-index:8000;pointer-events:none;opacity:0;transition:opacity .2s;background:linear-gradient(to bottom,rgba(103,232,249,.13),transparent)}
+    .scroll-zone.bottom{bottom:0;transform:rotate(180deg)}
+    .scroll-zone.top{top:0}
+    .scroll-zone.active{opacity:1}
+    #toast{position:fixed;left:50%;bottom:calc(88px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);z-index:10000;padding:11px 15px;border-radius:999px;background:#eafcff;color:#04111c;font-weight:800;font-size:13px;opacity:0;pointer-events:none;transition:.22s}
+    #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+    .settings{display:grid;grid-template-columns:1fr auto;gap:10px 12px;align-items:center}
+    .settings label{font-weight:700}
+    .settings small{display:block;color:var(--muted);font-weight:400;margin-top:2px}
+    input[type="range"]{width:150px}
+
+    .privacy{display:flex;align-items:flex-start;gap:10px;font-size:12px;color:var(--muted);margin-top:14px}
+    .privacy svg{flex:none;margin-top:2px}
+    .accuracy{font-variant-numeric:tabular-nums;color:#d7faff}
+    #cameraMini{position:fixed;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:8500;width:90px;height:68px;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:#000;box-shadow:var(--shadow);opacity:.78;pointer-events:none}
+    #cameraMini video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+    #cameraMini .camlabel{position:absolute;left:6px;bottom:4px;font-size:9px;background:rgba(0,0,0,.55);padding:2px 5px;border-radius:6px}
+    #webgazerVideoContainer,#webgazerFaceOverlay,#webgazerFaceFeedbackBox{display:none!important}
+
+    @media(max-width:620px){
+      .features{grid-template-columns:1fr}
+      .toolbar{grid-template-columns:repeat(2,1fr)}
+      .keyboard{grid-template-columns:repeat(6,1fr)}
+      .key.wide{grid-column:span 2}
+      .key.space{grid-column:span 3}
+      .card{padding:18px}
+      input[type="range"]{width:120px}
+    }
+  </style>
+</head>
+<body>
+  <div id="gazeCursor" aria-hidden="true"></div>
+  <div id="dwellRing" aria-hidden="true"></div>
+  <div class="scroll-zone top" id="scrollTopZone"></div>
+  <div class="scroll-zone bottom" id="scrollBottomZone"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand"><div class="logo">◉</div><span>EyeAccess</span></div>
+      <div class="status-pill"><span id="statusDot" class="status-dot"></span><span id="statusText">Not started</span></div>
+    </header>
+
+    <section id="introScreen" class="card">
+      <span class="hero-badge">Hands‑free accessibility prototype</span>
+      <h1>Control this app using only your eyes.</h1>
+      <p>EyeAccess uses the front camera to estimate where you are looking. After one short hands‑free calibration, gaze can move a cursor, dwell to select, scroll, and type on the built‑in keyboard.</p>
+
+      <div class="features">
+        <div class="feature"><b>👁️ 9‑point auto calibration</b><span>Look at each target; no repeated tapping needed.</span></div>
+        <div class="feature"><b>✨ Adaptive smoothing</b><span>Stable when resting, faster when your gaze moves.</span></div>
+        <div class="feature"><b>⏱️ Dwell to select</b><span>Hold your gaze on a button to activate it.</span></div>
+        <div class="feature"><b>⌨️ Gaze keyboard</b><span>Type without touching the screen.</span></div>
+      </div>
+
+      <div class="row">
+        <button id="startBtn" class="primary">Enable camera & calibrate</button>
+        <button id="demoBtn" class="secondary">Open demo without camera</button>
+      </div>
+      <div class="notice"><b>Important:</b> Camera permission requires one initial user/caregiver action in the browser. For full Android‑wide control, including other apps and true background operation, this web prototype must be converted to a native Android Accessibility Service.</div>
+      <div class="privacy">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 3 4 6v5c0 5.2 3.3 8.8 8 10 4.7-1.2 8-4.8 8-10V6l-8-3Z" stroke="currentColor" stroke-width="1.8"/></svg>
+        <span>Gaze processing is performed on the device by the eye‑tracking library. This page does not upload camera frames to a server.</span>
+      </div>
+    </section>
+
+    <section id="controlScreen">
+      <div class="control-grid">
+        <div class="control-card big-area">
+          <div>
+            <h2>Eye control is active</h2>
+            <p>Move your eyes to move the cursor. Keep looking at a target until the ring fills to activate it.</p>
+          </div>
+          <div class="demo-text">Try typing a message using only your gaze.</div>
+          <textarea id="textBox" placeholder="Your gaze-typed text appears here…" aria-label="Gaze typing text"></textarea>
+          <div class="toolbar">
+            <button class="gaze-btn" data-action="clear"><span class="label">Clear text</span><span class="dwell"></span></button>
+            <button class="gaze-btn" data-action="speak"><span class="label">Speak text</span><span class="dwell"></span></button>
+            <button class="gaze-btn" data-action="recalibrate"><span class="label">Recalibrate</span><span class="dwell"></span></button>
+            <button class="gaze-btn" data-action="pause"><span class="label">Pause gaze</span><span class="dwell"></span></button>
+          </div>
+        </div>
+
+        <div class="control-card">
+          <h3>Gaze keyboard</h3>
+          <p>Hold your gaze on a key to type.</p>
+          <div id="keyboard" class="keyboard" aria-label="On-screen gaze keyboard"></div>
+        </div>
+
+        <div class="control-card">
+          <h3>Control tuning</h3>
+          <div class="settings">
+            <label>Dwell time <small>Shorter = faster clicks; longer = fewer accidental clicks.</small></label>
+            <input id="dwellRange" type="range" min="550" max="1800" step="50" value="950">
+            <label>Smoothing <small>Higher = steadier cursor but slightly more lag.</small></label>
+            <input id="smoothRange" type="range" min="15" max="85" step="5" value="55">
+            <label>Scroll speed <small>Look near the top/bottom edge to scroll.</small></label>
+            <input id="scrollRange" type="range" min="2" max="16" step="1" value="7">
+          </div>
+        </div>
+
+        <div class="control-card">
+          <h3>Live status</h3>
+          <p>Tracking: <span id="trackingState" class="accuracy">waiting</span> · samples: <span id="sampleCount" class="accuracy">0</span> · cursor confidence: <span id="confidenceText" class="accuracy">—</span></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <section id="calibrationScreen" class="hidden" aria-label="Eye calibration">
+    <div class="calibration-info">
+      <h2 id="calibrationTitle">Look at the glowing dot</h2>
+      <p id="calibrationHint">Keep your head still and follow it only with your eyes.</p>
+    </div>
+    <div id="calibrationTarget"></div>
+    <div class="progress-wrap"><div id="calibrationProgress"></div></div>
+  </section>
+
+  <div id="cameraMini" class="hidden"><span class="camlabel">camera</span></div>
+
+<script>
+window.addEventListener("DOMContentLoaded", () => {
+  const $ = (q) => document.querySelector(q);
+  const intro = $("#introScreen");
+  const control = $("#controlScreen");
+  const calScreen = $("#calibrationScreen");
+  const calTarget = $("#calibrationTarget");
+  const calProgress = $("#calibrationProgress");
+  const statusDot = $("#statusDot");
+  const statusText = $("#statusText");
+  const gazeCursor = $("#gazeCursor");
+  const dwellRing = $("#dwellRing");
+  const toast = $("#toast");
+  const textBox = $("#textBox");
+  const keyboard = $("#keyboard");
+  const topZone = $("#scrollTopZone");
+  const bottomZone = $("#scrollBottomZone");
+  const cameraMini = $("#cameraMini");
+  const trackingState = $("#trackingState");
+  const sampleCountEl = $("#sampleCount");
+  const confidenceText = $("#confidenceText");
+
+  let trackerStarted = false;
+  let gazePaused = false;
+  let calibrating = false;
+  let rawCount = 0;
+  let filteredX = innerWidth / 2;
+  let filteredY = innerHeight / 2;
+  let lastRawX = filteredX;
+  let lastRawY = filteredY;
+  let lastT = performance.now();
+  let hoverEl = null;
+  let hoverStart = 0;
+  let lastActivatedEl = null;
+  let activationLockUntil = 0;
+  let lastScrollT = 0;
+  let dwellMs = 950;
+  let smoothing = 0.55;
+  let scrollSpeed = 7;
+  let recentDeltas = [];
+  let noDataTimer = null;
+
+  const keys = [
+    ..."QWERTYUIOP",
+    ..."ASDFGHJKL",
+    ..."ZXCVBNM",
+    "SPACE","⌫","↵",".",",","?","!"
+  ];
+
+  function buildKeyboard(){
+    keyboard.innerHTML = "";
+    keys.forEach(k => {
+      const b = document.createElement("button");
+      b.className = "key gaze-target";
+      if(k === "SPACE") b.classList.add("space");
+      if(k === "⌫" || k === "↵") b.classList.add("wide");
+      b.dataset.key = k;
+      b.innerHTML = `<span>${k === "SPACE" ? "space" : k}</span><i class="dwell"></i>`;
+      keyboard.appendChild(b);
+    });
+  }
+  buildKeyboard();
+
+  function showToast(msg){
+    toast.textContent = msg;
+    toast.classList.add("show");
+    clearTimeout(showToast.t);
+    showToast.t = setTimeout(() => toast.classList.remove("show"), 1450);
+  }
+
+  function setStatus(text, live=false){
+    statusText.textContent = text;
+    statusDot.classList.toggle("live", !!live);
+  }
+
+  function updateSettings(){
+    dwellMs = +$("#dwellRange").value;
+    smoothing = +$("#smoothRange").value / 100;
+    scrollSpeed = +$("#scrollRange").value;
+  }
+  ["#dwellRange","#smoothRange","#scrollRange"].forEach(id => $(id).addEventListener("input", updateSettings));
+  updateSettings();
+
+  function attachCameraPreview(){
+    const vid = document.querySelector("#webgazerVideoFeed");
+    if(vid && !cameraMini.querySelector("video")){
+      const clone = document.createElement("video");
+      clone.autoplay = true; clone.muted = true; clone.playsInline = true;
+      if(vid.srcObject) clone.srcObject = vid.srcObject;
+      cameraMini.prepend(clone);
+      cameraMini.classList.remove("hidden");
+    }
+  }
+
+  async function startTracker(){
+    if(trackerStarted) return true;
+    if(!window.webgazer){
+      showToast("Eye-tracking library did not load. Check internet connection.");
+      return false;
+    }
+    try{
+      setStatus("Requesting camera…");
+      webgazer
+        .setRegression("ridge")
+        .saveDataAcrossSessions(false)
+        .showVideoPreview(false)
+        .showPredictionPoints(false)
+        .applyKalmanFilter(true);
+
+      webgazer.setGazeListener((data, elapsed) => {
+        if(!data || calibrating || gazePaused) return;
+        onGaze(data.x, data.y, elapsed);
+      });
+
+      await webgazer.begin();
+      trackerStarted = true;
+      setStatus("Camera ready", true);
+      trackingState.textContent = "active";
+      setTimeout(attachCameraPreview, 650);
+      return true;
+    }catch(err){
+      console.error(err);
+      setStatus("Camera blocked");
+      showToast("Camera permission is required.");
+      return false;
+    }
+  }
+
+  function calibrationPoints(){
+    const safeX = Math.max(52, innerWidth * .09);
+    const safeY = Math.max(92, innerHeight * .12);
+    const right = innerWidth - safeX;
+    const bottom = innerHeight - safeY;
+    const cx = innerWidth / 2, cy = innerHeight / 2;
+    return [
+      [safeX,safeY],[cx,safeY],[right,safeY],
+      [safeX,cy],[cx,cy],[right,cy],
+      [safeX,bottom],[cx,bottom],[right,bottom]
+    ];
+  }
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  async function runCalibration(){
+    if(!trackerStarted) return;
+    calibrating = true;
+    gazePaused = false;
+    calScreen.classList.remove("hidden");
+    gazeCursor.classList.remove("live");
+    dwellRing.style.opacity = 0;
+    setStatus("Calibrating…", true);
+
+    try{ if(webgazer.clearData) webgazer.clearData(); }catch(e){}
+
+    const pts = calibrationPoints();
+    const repetitions = 2; // two passes for better stability
+    const total = pts.length * repetitions;
+    let done = 0;
+
+    for(let pass=0; pass<repetitions; pass++){
+      const order = pass === 0 ? pts : [...pts].reverse();
+      for(const [x,y] of order){
+        $("#calibrationHint").textContent = pass === 0
+          ? "Follow the target with your eyes. Keep your head as still as comfortable."
+          : "Second pass: keep looking at each target until it moves.";
+        calTarget.style.left = x+"px";
+        calTarget.style.top = y+"px";
+        await sleep(520); // allow eye movement to settle
+
+        // Record repeated samples at the known target location while the user is looking at it.
+        for(let s=0; s<9; s++){
+          try{
+            if(typeof webgazer.recordScreenPosition === "function"){
+              webgazer.recordScreenPosition(x, y, "click");
+            }
+          }catch(e){}
+          await sleep(92);
+        }
+        done++;
+        calProgress.style.width = ((done/total)*100).toFixed(1)+"%";
+        await sleep(110);
+      }
+    }
+
+    $("#calibrationTitle").textContent = "Calibration complete";
+    $("#calibrationHint").textContent = "Keep the phone at roughly the same distance for best accuracy.";
+    await sleep(900);
+    calScreen.classList.add("hidden");
+    $("#calibrationTitle").textContent = "Look at the glowing dot";
+    intro.classList.add("hidden");
+    control.style.display = "block";
+    calibrating = false;
+    setStatus("Eye control active", true);
+    gazeCursor.classList.add("live");
+    showToast("Eye control ready");
+  }
+
+  function adaptiveAlpha(x,y,now){
+    const dt = Math.max(8, now-lastT);
+    const dist = Math.hypot(x-lastRawX, y-lastRawY);
+    const speed = dist / dt; // px/ms
+    // High movement => higher alpha (responsive); low movement => lower alpha (stable).
+    const base = 1 - smoothing;
+    return Math.min(.72, Math.max(.08, base + Math.min(.42, speed*.22)));
+  }
+
+  function onGaze(x,y){
+    if(!Number.isFinite(x) || !Number.isFinite(y)) return;
+    rawCount++;
+    sampleCountEl.textContent = rawCount;
+
+    const now = performance.now();
+    const a = adaptiveAlpha(x,y,now);
+    filteredX += (x-filteredX)*a;
+    filteredY += (y-filteredY)*a;
+
+    // Clamp cursor to viewport.
+    filteredX = Math.max(4, Math.min(innerWidth-4, filteredX));
+    filteredY = Math.max(4, Math.min(innerHeight-4, filteredY));
+
+    const delta = Math.hypot(x-lastRawX,y-lastRawY);
+    recentDeltas.push(delta);
+    if(recentDeltas.length > 15) recentDeltas.shift();
+    const avgDelta = recentDeltas.reduce((a,b)=>a+b,0)/Math.max(1,recentDeltas.length);
+    const stability = Math.max(0, Math.min(100, 100 - avgDelta*1.5));
+    confidenceText.textContent = Math.round(stability)+"%";
+
+    gazeCursor.style.transform = `translate3d(${filteredX}px,${filteredY}px,0)`;
+    dwellRing.style.transform = `translate3d(${filteredX}px,${filteredY}px,0)`;
+    dwellRing.style.opacity = 1;
+
+    processDwell(filteredX,filteredY,now);
+    processScroll(filteredY,now);
+
+    lastRawX = x; lastRawY = y; lastT = now;
+    clearTimeout(noDataTimer);
+    trackingState.textContent = "active";
+    noDataTimer = setTimeout(()=>trackingState.textContent="searching for eyes",900);
+  }
+
+  function interactiveAt(x,y){
+    const el = document.elementFromPoint(x,y);
+    if(!el) return null;
+    return el.closest(".gaze-btn,.key");
+  }
+
+  function setDwellVisual(el,pct){
+    document.querySelectorAll(".gaze-btn.gaze-hover").forEach(n => n.classList.remove("gaze-hover"));
+    document.querySelectorAll(".gaze-btn .dwell,.key .dwell").forEach(n => n.style.height="0%");
+    if(el){
+      el.classList.add("gaze-hover");
+      const d = el.querySelector(".dwell");
+      if(d) d.style.height = `${Math.min(100,pct)}%`;
+    }
+    dwellRing.style.setProperty("--pct", `${Math.min(100,pct)}%`);
+  }
+
+  function processDwell(x,y,now){
+    const el = interactiveAt(x,y);
+    if(el !== hoverEl){
+      hoverEl = el;
+      hoverStart = now;
+      setDwellVisual(el,0);
+      return;
+    }
+    if(!el){
+      dwellRing.style.setProperty("--pct","0%");
+      return;
+    }
+    const pct = ((now-hoverStart)/dwellMs)*100;
+    setDwellVisual(el,pct);
+
+    if(pct >= 100 && now > activationLockUntil){
+      activate(el);
+      activationLockUntil = now + 650;
+      hoverStart = now + 250;
+      lastActivatedEl = el;
+    }
+  }
+
+  function activate(el){
+    el.classList.remove("activated");
+    void el.offsetWidth;
+    el.classList.add("activated");
+
+    if(el.classList.contains("key")){
+      typeKey(el.dataset.key);
+      return;
+    }
+    const action = el.dataset.action;
+    if(action === "clear"){
+      textBox.value = "";
+      showToast("Text cleared");
+    }else if(action === "speak"){
+      const txt = textBox.value.trim();
+      if(!txt) return showToast("Type something first");
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(txt);
+      speechSynthesis.speak(u);
+      showToast("Speaking");
+    }else if(action === "recalibrate"){
+      runCalibration();
+    }else if(action === "pause"){
+      togglePause(el);
+    }
+  }
+
+  function typeKey(k){
+    textBox.focus({preventScroll:true});
+    if(k === "SPACE") textBox.value += " ";
+    else if(k === "⌫") textBox.value = textBox.value.slice(0,-1);
+    else if(k === "↵") textBox.value += "\n";
+    else textBox.value += k;
+    textBox.scrollTop = textBox.scrollHeight;
+  }
+
+  function togglePause(el){
+    gazePaused = !gazePaused;
+    const label = el.querySelector(".label");
+    if(gazePaused){
+      label.textContent = "Resume gaze";
+      gazeCursor.classList.remove("live");
+      dwellRing.style.opacity=0;
+      trackingState.textContent="paused";
+      setStatus("Paused");
+      // A touch/click remains available to resume if gaze is paused.
+    }else{
+      label.textContent = "Pause gaze";
+      gazeCursor.classList.add("live");
+      trackingState.textContent="active";
+      setStatus("Eye control active",true);
+    }
+  }
+
+  function processScroll(y,now){
+    const edge = Math.max(54, innerHeight*.075);
+    let dir = 0;
+    if(y < edge) dir = -1;
+    else if(y > innerHeight-edge) dir = 1;
+
+    topZone.classList.toggle("active",dir<0);
+    bottomZone.classList.toggle("active",dir>0);
+
+    if(!dir || now-lastScrollT < 26) return;
+    const depth = dir<0 ? (edge-y)/edge : (y-(innerHeight-edge))/edge;
+    const amount = dir * scrollSpeed * (1 + Math.max(0,Math.min(1,depth))*2.2);
+    window.scrollBy({top:amount,left:0,behavior:"auto"});
+    lastScrollT = now;
+  }
+
+  $("#startBtn").addEventListener("click", async () => {
+    const ok = await startTracker();
+    if(ok) runCalibration();
+  });
+
+  $("#demoBtn").addEventListener("click", () => {
+    intro.classList.add("hidden");
+    control.style.display = "block";
+    setStatus("Demo mode");
+    showToast("Demo mode: touch controls are active");
+  });
+
+  // Touch/click fallback is intentionally kept for setup/caregiver access.
+  document.addEventListener("click", e => {
+    const key = e.target.closest(".key");
+    if(key && (!trackerStarted || gazePaused)) typeKey(key.dataset.key);
+    const btn = e.target.closest(".gaze-btn");
+    if(btn && (!trackerStarted || gazePaused)){
+      if(btn.dataset.action === "pause") togglePause(btn);
+      else activate(btn);
+    }
+  });
+
+  // Visibility warning: browsers throttle/suspend camera/JS in background.
+  document.addEventListener("visibilitychange", () => {
+    if(document.hidden && trackerStarted){
+      setStatus("Background tracking unavailable");
+    }else if(trackerStarted && !gazePaused){
+      setStatus("Eye control active",true);
+    }
+  });
+
+  window.addEventListener("resize", () => {
+    filteredX = Math.min(filteredX,innerWidth-4);
+    filteredY = Math.min(filteredY,innerHeight-4);
+  });
+
+  // Helpful offline/error hint if CDN cannot load.
+  window.addEventListener("error", (e) => {
+    if(String(e.filename||"").includes("webgazer")){
+      showToast("Could not load eye-tracking library.");
+    }
+  });
+});
+</script>
+</body>
+</html>
